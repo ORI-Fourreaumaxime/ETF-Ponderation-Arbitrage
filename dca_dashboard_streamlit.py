@@ -62,6 +62,9 @@ if st.sidebar.button("🔄 Rafraîchir"):
     st.cache_data.clear()
 threshold_pct = st.sidebar.slider("Seuil déviation (%)", 1, 20, 10, 1)
 debug = st.sidebar.checkbox("Afficher debug")
+use_container_cards = st.sidebar.checkbox(
+    "Version st.container/st.metric", value=False
+)
 
 # --- DONNÉES ---
 @st.cache_data
@@ -152,26 +155,49 @@ for idx, (name, series) in enumerate(prices.items()):
         else:
             weights[lbl] = None
 
-    # Carte ETF
-    with cols[idx % 2]:
-        st.markdown(
-            f"<div style='border:2px solid #1f77b4; border-radius:6px; padding:12px; margin:6px;'>", unsafe_allow_html=True
-        )
-        st.markdown(
-            f"<h4>{name}: {last:.2f} <span style='color:{perf_color}'>{delta:+.2f}%</span></h4>", unsafe_allow_html=True
-        )
-        # Graphique
-        key = f"win_{name}"
-        if key not in st.session_state:
-            st.session_state[key] = 'Annuel'
-        period = timeframes[st.session_state[key]]
-        df_plot = data.tail(period)
-        fig = px.line(df_plot, height=200)
-        fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
 
-        # Badges
-        badge_cols = st.columns(len(timeframes))
+
+    key = f"win_{name}"
+    if key not in st.session_state:
+        st.session_state[key] = 'Annuel'
+    period = timeframes[st.session_state[key]]
+    df_plot = data.tail(period)
+    fig = px.line(df_plot, height=200)
+    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
+    alloc = allocations.get(name, 0)
+
+    items = []
+    for lbl in macro_series:
+        if lbl in macro_df and not macro_df[lbl].dropna().empty:
+            val = macro_df[lbl].dropna().iloc[-1]
+            items.append(f"<li>{lbl}: {val:.2f}</li>")
+        else:
+            items.append(f"<li>{lbl}: N/A</li>")
+    half = len(items)//2 + len(items)%2
+    macro_html = (
+        "<div style='display:flex;gap:20px;'><ul style='margin:0;padding-left:16px'>"
+        f"{''.join(items[:half])}</ul><ul style='margin:0;padding-left:16px'>{''.join(items[half:])}</ul></div>"
+    )
+
+    with cols[idx % 2]:
+        if use_container_cards:
+            target = st.container(border=True)
+            target.subheader(name)
+            target.metric("Dernier cours", f"{last:.2f}", delta=f"{delta:+.2f}%")
+        else:
+            st.markdown(
+                "<div style='border:2px solid #1f77b4; border-radius:6px; padding:12px; margin:6px;'>",
+                unsafe_allow_html=True,
+            )
+            target = st
+            target.markdown(
+                f"<h4>{name}: {last:.2f} <span style='color:{perf_color}'>{delta:+.2f}%</span></h4>",
+                unsafe_allow_html=True,
+            )
+
+        target.plotly_chart(fig, use_container_width=True)
+
+        badge_cols = target.columns(len(timeframes))
         for i, (lbl, w) in enumerate(timeframes.items()):
             if len(data) >= w:
                 m = data.tail(w).mean()
@@ -179,39 +205,29 @@ for idx, (name, series) in enumerate(prices.items()):
                 _, arrow, bg = score_and_style(diff, threshold_pct)
                 tooltip = f"Moyenne {lbl}: {m:.2f}"
             else:
-                arrow, bg, tooltip = '↓','crimson','N/A'
+                arrow, bg, tooltip = '↓', 'crimson', 'N/A'
             with badge_cols[i]:
                 if st.button(f"{lbl} {arrow}", key=f"{name}_{lbl}"):
                     st.session_state[key] = lbl
                 st.markdown(
-                    f"<span title='{tooltip}' style='background:{bg};color:white;padding:4px;border-radius:4px;font-size:12px;'>{lbl} {arrow}</span>", unsafe_allow_html=True
+                    f"<span title='{tooltip}' style='background:{bg};color:white;padding:4px;border-radius:4px;font-size:12px;'>{lbl} {arrow}</span>",
+                    unsafe_allow_html=True,
                 )
 
-        # Points de pondération
         pts = ", ".join(
             f"{lbl}:{weights[lbl]:+0.1f}" for lbl in timeframes if weights[lbl] is not None
         )
-        st.markdown(f"<div style='font-size:12px;'>Points: {pts}</div>", unsafe_allow_html=True)
-        # Allocation DCA
-        alloc = allocations.get(name, 0)
-        st.markdown(
-            f"<div style='text-align:right;color:#ff7f0e;'>Allocation DCA: {alloc:.1f}%</div>", unsafe_allow_html=True
+        target.markdown(
+            f"<div style='font-size:12px;'>Points: {pts}</div>", unsafe_allow_html=True
         )
+        target.markdown(
+            f"<div style='text-align:right;color:#ff7f0e;'>Allocation DCA: {alloc:.1f}%</div>",
+            unsafe_allow_html=True,
+        )
+        target.markdown(macro_html, unsafe_allow_html=True)
 
-        # Macro indicateurs
-        items = []
-        for lbl in macro_series:
-            if lbl in macro_df and not macro_df[lbl].dropna().empty:
-                val = macro_df[lbl].dropna().iloc[-1]
-                items.append(f"<li>{lbl}: {val:.2f}</li>")
-            else:
-                items.append(f"<li>{lbl}: N/A</li>")
-        half = len(items)//2 + len(items)%2
-        st.markdown(
-            "<div style='display:flex;gap:20px;'><ul style='margin:0;padding-left:16px'>"
-            f"{''.join(items[:half])}</ul><ul style='margin:0;padding-left:16px'>{''.join(items[half:])}</ul></div>", unsafe_allow_html=True
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+        if not use_container_cards:
+            target.markdown("</div>", unsafe_allow_html=True)
 
 # Clé FRED
 if macro_df.empty:
