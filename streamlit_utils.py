@@ -7,6 +7,9 @@ faciliter la création de conteneurs "carte" au style homogène.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from uuid import uuid4
+
 import streamlit as st
 
 
@@ -51,22 +54,40 @@ def get_border_color(pct: float) -> str:
     return "crimson"
 
 
-def begin_card(border_color: str = "crimson") -> None:
-    """Ouvre un conteneur 'carte' avec une bordure colorée.
+@contextmanager
+def card(border_color: str) -> None:
+    """Conteneur Streamlit avec bordure colorée.
 
-    Les styles principaux (padding, marges, ombre, etc.) sont définis dans la
-    feuille `css/styles.css`. Ici, on ne fait que surcharger la couleur de la
-    bordure pour refléter l'état de l'ETF.
+    Streamlit n'autorise pas de laisser une balise HTML ouverte autour des
+    widgets. On utilise donc un petit ``div`` marqueur et le sélecteur CSS
+    ``:has()`` pour appliquer le style sur le conteneur parent.
+
+    Parameters
+    ----------
+    border_color: str
+        Couleur de la bordure à appliquer.
     """
 
-    st.markdown(
-        f"<div class='card' style='border-color:{border_color};'>",
+    marker = uuid4().hex
+    container = st.container()
+    # Le div "marqueur" est masqué ; il sert uniquement à cibler le parent.
+    container.markdown(
+        f"""
+        <style>
+        div:has(> div#{marker}) {{
+            border:2px solid {border_color};
+            border-radius:8px;
+            padding:12px;
+            margin:8px 0;
+            background-color:#ffffff;
+            box-shadow:0 2px 4px rgba(0,0,0,0.1);
+        }}
+        div#{marker}{{display:none}}
+        </style>
+        <div id="{marker}"></div>
+        """,
         unsafe_allow_html=True,
     )
-
-
-def end_card() -> None:
-    """Ferme le conteneur de la carte précédemment ouvert."""
-
-    st.markdown("</div>", unsafe_allow_html=True)
+    with container:
+        yield
 

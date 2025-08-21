@@ -8,7 +8,7 @@ from constants       import ETFS, TIMEFRAMES, MACRO_SERIES
 from data_loader     import load_prices, load_macro
 from scoring         import pct_change, score_and_style
 from plotting        import make_timeseries_fig
-from streamlit_utils import inject_css, begin_card, end_card, get_border_color
+from streamlit_utils import inject_css, card, get_border_color
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(
@@ -88,69 +88,67 @@ for idx, (name, series) in enumerate(prices.items()):
 
     # --- CARTE COMPLÈTE ---
     with cols[idx % 2]:
-        begin_card(border_color)
+        with card(border_color):
 
-        # Titre
-        st.markdown(
-            f"<div style='font-size:20px;font-family:sans-serif;'>{name}</div>",
-            unsafe_allow_html=True,
-        )
+            # Titre
+            st.markdown(
+                f"<div style='font-size:20px;font-family:sans-serif;'>{name}</div>",
+                unsafe_allow_html=True,
+            )
 
-        # Dernier cours
-        st.markdown(
-            f"<div style='font-size:14px;font-family:sans-serif;'>Dernier cours : {last:.2f}</div>",
-            unsafe_allow_html=True,
-        )
+            # Dernier cours
+            st.markdown(
+                f"<div style='font-size:14px;font-family:sans-serif;'>Dernier cours : {last:.2f}</div>",
+                unsafe_allow_html=True,
+            )
 
-        # Tendance
-        arrow = "↑" if delta > 0 else "↓" if delta < 0 else "→"
-        st.markdown(
-            f"<div style='font-size:14px;font-family:sans-serif;'>Tendance : "
-            f"<span style='color:{perf_color}'>{arrow} {delta:+.2f}%</span></div>",
-            unsafe_allow_html=True,
-        )
+            # Tendance
+            arrow = "↑" if delta > 0 else "↓" if delta < 0 else "→"
+            st.markdown(
+                f"<div style='font-size:14px;font-family:sans-serif;'>Tendance : "
+                f"<span style='color:{perf_color}'>{arrow} {delta:+.2f}%</span></div>",
+                unsafe_allow_html=True,
+            )
 
-        # Allocation
-        st.markdown(
-            f"<div style='font-size:14px;font-family:sans-serif;'>Allocation : {alloc_pct:.1f}%</div>",
-            unsafe_allow_html=True,
-        )
+            # Allocation
+            st.markdown(
+                f"<div style='font-size:14px;font-family:sans-serif;'>Allocation : {alloc_pct:.1f}%</div>",
+                unsafe_allow_html=True,
+            )
 
-        # Chart
-        st.plotly_chart(fig, use_container_width=True)
+            # Chart
+            st.plotly_chart(fig, use_container_width=True)
 
-        # Badges interactifs
-        badge_cols = st.columns(len(TIMEFRAMES))
-        for i, (lbl, w) in enumerate(TIMEFRAMES.items()):
-            with badge_cols[i]:
-                if len(data) >= w:
-                    m    = data.tail(w).mean()
-                    diff = (last - m) / m
-                    score, arrow, bg = score_and_style(diff, threshold_pct)
+            # Badges interactifs
+            badge_cols = st.columns(len(TIMEFRAMES))
+            for i, (lbl, w) in enumerate(TIMEFRAMES.items()):
+                with badge_cols[i]:
+                    if len(data) >= w:
+                        m    = data.tail(w).mean()
+                        diff = (last - m) / m
+                        score, arrow, bg = score_and_style(diff, threshold_pct)
+                    else:
+                        score, arrow, bg = 0, "↓", "crimson"
+
+                    if st.button(f"{lbl} {arrow}", key=f"{name}_{lbl}"):
+                        st.session_state[key_win] = lbl
+
+                    st.markdown(
+                        f"<span style='background:{bg};color:white;"
+                        f"padding:4px;border-radius:4px;font-size:12px;'>"
+                        f"{lbl} {arrow}</span>",
+                        unsafe_allow_html=True
+                    )
+
+            # Macro-indicateurs
+            items = []
+            for lbl in MACRO_SERIES:
+                if lbl in macro_df and not macro_df[lbl].dropna().empty:
+                    val = macro_df[lbl].dropna().iloc[-1]
+                    items.append(f"<li>{lbl}: {val:.2f}</li>")
                 else:
-                    score, arrow, bg = 0, "↓", "crimson"
-
-                if st.button(f"{lbl} {arrow}", key=f"{name}_{lbl}"):
-                    st.session_state[key_win] = lbl
-
-                st.markdown(
-                    f"<span style='background:{bg};color:white;"
-                    f"padding:4px;border-radius:4px;font-size:12px;'>"
-                    f"{lbl} {arrow}</span>",
-                    unsafe_allow_html=True
-                )
-
-        # Macro-indicateurs
-        items = []
-        for lbl in MACRO_SERIES:
-            if lbl in macro_df and not macro_df[lbl].dropna().empty:
-                val = macro_df[lbl].dropna().iloc[-1]
-                items.append(f"<li>{lbl}: {val:.2f}</li>")
-            else:
-                items.append(f"<li>{lbl}: N/A</li>")
-        st.markdown(
-            "<ul style='columns:2;margin-top:8px;'>" + "".join(items) + "</ul>",
-            unsafe_allow_html=True
-        )
-
-        end_card()
+                    items.append(f"<li>{lbl}: N/A</li>")
+            st.markdown(
+                "<ul style='columns:2;margin-top:8px;'>" + "".join(items) + "</ul>",
+                unsafe_allow_html=True
+            )

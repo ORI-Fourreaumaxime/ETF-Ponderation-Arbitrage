@@ -165,6 +165,7 @@ for idx, (name, series) in enumerate(prices.items()):
     fig = px.line(df_plot, height=200)
     fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
     alloc = allocations.get(name, 0)
+    color = 'green' if alloc >= 40 else 'gold' if alloc >= 20 else 'crimson'
 
     items = []
     for lbl in macro_series:
@@ -182,6 +183,10 @@ for idx, (name, series) in enumerate(prices.items()):
     with cols[idx % 2]:
         if use_container_cards:
             target = st.container(border=True)
+            target.markdown(
+                f"<div style='height:4px;background:{color};margin:-10px -10px 10px -10px;border-radius:4px 4px 0 0'></div>",
+                unsafe_allow_html=True,
+            )
             target.subheader(name)
             target.metric("Dernier cours", f"{last:.2f}", delta=f"{delta:+.2f}%")
         else:
