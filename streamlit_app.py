@@ -119,7 +119,9 @@ def redistribute(weights: dict[str, float], changed: str, new_val: float) -> dic
     return weights
 
 st.sidebar.header("Pondération ETF")
-hdr = st.sidebar.columns([2, 2, 2])
+# Colonnes élargies pour éviter les retours à la ligne des noms d'ETF et
+# garantir un alignement propre avec les deux champs numériques.
+hdr = st.sidebar.columns([3, 2, 2])
 hdr[0].markdown("**ETF**")
 hdr[1].markdown("**Origine %**")
 hdr[2].markdown("**Reco %**")
@@ -128,8 +130,13 @@ prev_reco = st.session_state["reco_pcts"].copy()
 orig_inputs: dict[str, float] = {}
 reco_inputs: dict[str, float] = {}
 for name in ETFS:
-    col1, col2, col3 = st.sidebar.columns([2, 2, 2])
-    col1.markdown(name)
+    # Utilisation d'un conteneur flex pour aligner verticalement le nom de l'ETF
+    # avec les champs de saisie, ce qui évite tout décalage entre les lignes.
+    col1, col2, col3 = st.sidebar.columns([3, 2, 2])
+    col1.markdown(
+        f"<div style='display:flex;height:38px;align-items:center'>{name}</div>",
+        unsafe_allow_html=True,
+    )
     o_val = col2.number_input(
         "",
         key=f"orig_{name}",
@@ -174,7 +181,7 @@ if changed_reco:
 # Ligne récapitulative des totaux pour chaque colonne
 tot_orig = sum(st.session_state["origine_pcts"].values())
 tot_reco = sum(st.session_state["reco_pcts"].values())
-tot_cols = st.sidebar.columns([2, 2, 2])
+tot_cols = st.sidebar.columns([3, 2, 2])
 tot_cols[0].markdown("**Total**")
 tot_cols[1].markdown(f"**{tot_orig:.2f}%**")
 tot_cols[2].markdown(f"**{tot_reco:.2f}%**")
