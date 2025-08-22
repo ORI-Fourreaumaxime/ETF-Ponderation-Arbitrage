@@ -19,11 +19,11 @@ def score_and_style(diff: float, threshold_pct: float) -> Tuple[float, str, str]
     - couleur de fond
     """
     t = threshold_pct / 100.0
-    if diff <= -t:
-        return 1.0,  '↑', 'green'
-    elif diff <= 0:
-        return 0.5, '↗', '#c8e6c9'
-    elif diff < t:
-        return -0.5,'↘','orange'
+    if diff >= t:
+        return 1.0,  '↑', '#006400'  # vert foncé
+    elif diff >= 0:
+        return 0.5, '↗', '#90ee90'  # vert clair
+    elif diff > -t:
+        return -0.5, '↘', 'orange'
     else:
-        return -1.0,'↓','crimson'
+        return -1.0, '↓', 'red'
