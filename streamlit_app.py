@@ -10,22 +10,46 @@ from scoring         import pct_change, score_and_style
 from plotting        import make_timeseries_fig
 from streamlit_utils import inject_css, begin_card, end_card
 
+
+def score_to_colors(score: float) -> tuple[str, str]:
+    """Retourne couleur pleine et fond à 50% selon le score."""
+    if score > 0:
+        return "green", "rgba(0,128,0,0.5)"
+    elif score < 0:
+        return "crimson", "rgba(220,20,60,0.5)"
+    else:
+        return "gray", "rgba(128,128,128,0.5)"
+
 # --- CONFIGURATION DE LA PAGE ---
+# Définition du titre et de la mise en page générale (large avec barre latérale ouverte).
 st.set_page_config(
     page_title="Dashboard DCA ETF",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+# CSS global pour homogénéiser l'apparence des "cartes" et autres éléments.
 inject_css()
 
 # --- SIDEBAR DE RÉGLAGES ---
+# Zone de contrôle à gauche permettant de modifier les paramètres de l'interface.
 st.sidebar.header("Paramètres de rééquilibrage")
+# Bouton pour purger les données mises en cache et forcer un rechargement.
 if st.sidebar.button("🔄 Rafraîchir"):
     st.cache_data.clear()
+# Curseur définissant le seuil de déclenchement des indicateurs de tendance.
 threshold_pct = st.sidebar.slider("Seuil déviation (%)", 5, 30, 15, 5)
-st.sidebar.write("VIX non disponible")  # exemple de ligne libre
+# Sélecteur global de période pour les graphiques des cartes ETF.
+period_lbl = st.sidebar.selectbox(
+    "Période des graphiques",
+    list(TIMEFRAMES.keys()),
+    index=3,
+)
+period = TIMEFRAMES[period_lbl]
+# Exemple d'information additionnelle libre dans la barre latérale.
+st.sidebar.write("VIX non disponible")
 
 # --- CHARGEMENT DES DONNÉES ---
+# Récupération des prix des ETF et des indicateurs macro-économiques.
 prices   = load_prices()
 macro_df = load_macro()
 
@@ -58,21 +82,104 @@ for name, series in prices.items():
 min_score   = min(raw_scores.values(), default=0.0)
 shift       = -min_score if min_score < 0 else 0.0
 adj_scores  = {k: v + shift for k, v in raw_scores.items()}
-total       = sum(adj_scores.values()) or 1.0
-allocations = {k: v / total * 100 for k, v in adj_scores.items()}  # en % sur 100%
 
-# --- AFFICHAGE SIDEBAR ALLOCATIONS ---
-st.sidebar.header("Allocation dynamique (%)")
-for name, pct in allocations.items():
-    # On affiche en % et la tendance (score brut)
-    score = raw_scores[name]
-    arrow = "▲" if score > 0 else "▼" if score < 0 else "→"
-    st.sidebar.markdown(f"**{name}: {pct:.1f}% {arrow}**")
+# --- AFFICHAGE SIDEBAR PONDÉRATION ---
+# Initialisation des valeurs « Origine » en session pour pouvoir les modifier.
+default_pct = 100.0 / len(ETFS)
+if "origine_pcts" not in st.session_state:
+    st.session_state["origine_pcts"] = {name: default_pct for name in ETFS}
+if "reco_pcts" not in st.session_state:
+    # Première recommandation basée sur les scores ajustés et la pondération d'origine.
+    weighted = {n: st.session_state["origine_pcts"][n] * adj_scores.get(n, 0.0) for n in ETFS}
+    tot = sum(weighted.values()) or 1
+    st.session_state["reco_pcts"] = {n: weighted[n] / tot * 100 for n in ETFS}
+
+
+def redistribute(weights: dict[str, float], changed: str, new_val: float) -> dict[str, float]:
+    """Répartit le delta sur les autres valeurs pour garder un total de 100 %."""
+    new_val = max(0.0, min(100.0, new_val))
+    old_val = weights[changed]
+    others = [k for k in weights if k != changed]
+    remaining = 100 - new_val
+    old_remaining = 100 - old_val
+    if not others or old_remaining <= 0:
+        weights[changed] = new_val
+        for k in others:
+            weights[k] = remaining / len(others)
+    else:
+        for k in others:
+            weights[k] = weights[k] * (remaining / old_remaining)
+        weights[changed] = new_val
+    # Correction de l'arrondi éventuel
+    total = sum(weights.values())
+    if total:
+        factor = 100 / total
+        for k in weights:
+            weights[k] *= factor
+    return weights
+
+st.sidebar.header("Pondération ETF")
+hdr = st.sidebar.columns([2, 2, 2])
+hdr[0].markdown("**ETF**")
+hdr[1].markdown("**Origine %**")
+hdr[2].markdown("**Reco %**")
+prev_orig = st.session_state["origine_pcts"].copy()
+prev_reco = st.session_state["reco_pcts"].copy()
+orig_inputs: dict[str, float] = {}
+reco_inputs: dict[str, float] = {}
+for name in ETFS:
+    col1, col2, col3 = st.sidebar.columns([2, 2, 2])
+    col1.markdown(name)
+    o_val = col2.number_input(
+        "",
+        key=f"orig_{name}",
+        min_value=0.0,
+        max_value=100.0,
+        step=0.5,
+        format="%.2f",
+        value=st.session_state["origine_pcts"][name],
+    )
+    r_val = col3.number_input(
+        "",
+        key=f"reco_{name}",
+        min_value=0.0,
+        max_value=100.0,
+        step=0.5,
+        format="%.2f",
+        value=st.session_state["reco_pcts"][name],
+    )
+    orig_inputs[name] = o_val
+    reco_inputs[name] = r_val
+
+# Détection des changements et redistribution pour conserver 100 %
+changed_orig = [n for n in ETFS if abs(orig_inputs[n] - prev_orig[n]) > 1e-9]
+if changed_orig:
+    key = changed_orig[0]
+    st.session_state["origine_pcts"] = redistribute(prev_orig, key, orig_inputs[key])
+    weighted = {n: st.session_state["origine_pcts"][n] * adj_scores.get(n, 0.0) for n in ETFS}
+    tot = sum(weighted.values()) or 1
+    st.session_state["reco_pcts"] = {n: weighted[n] / tot * 100 for n in ETFS}
+    st.experimental_rerun()
+
+changed_reco = [n for n in ETFS if abs(reco_inputs[n] - prev_reco[n]) > 1e-9]
+if changed_reco:
+    key = changed_reco[0]
+    st.session_state["reco_pcts"] = redistribute(prev_reco, key, reco_inputs[key])
+    st.experimental_rerun()
+
+tot_orig = sum(st.session_state["origine_pcts"].values())
+tot_reco = sum(st.session_state["reco_pcts"].values())
+if abs(tot_orig - 100) > 0.01:
+    st.sidebar.error(f"Origine total {tot_orig:.2f}% (Δ {tot_orig-100:+.2f}%)")
+if abs(tot_reco - 100) > 0.01:
+    st.sidebar.error(f"Reco total {tot_reco:.2f}% (Δ {tot_reco-100:+.2f}%)")
 
 # --- AFFICHAGE PRINCIPAL ---
 st.title("Dashboard DCA ETF")
 
+# Deux colonnes pour présenter les cartes ETF côte à côte.
 cols   = st.columns(2)
+# Pré-calcul des variations récentes pour l'affichage en pourcentage.
 deltas = {n: pct_change(prices[n].dropna()) for n in prices}
 
 for idx, (name, series) in enumerate(prices.items()):
@@ -80,55 +187,47 @@ for idx, (name, series) in enumerate(prices.items()):
     if data.empty:
         continue
 
-    # Valeur & variation
+    # Valeur & variation affichées en haut de la carte
     last       = data.iloc[-1]
     delta      = deltas.get(name, 0.0)
     perf_color = "green" if delta >= 0 else "crimson"
 
-    # Choix de la période via session_state
-    key_win = f"win_{name}"
-    if key_win not in st.session_state:
-        st.session_state[key_win] = "Annuel"
-    period_lbl = st.session_state[key_win]
-    period     = TIMEFRAMES[period_lbl]
 
-    # Graphique Plotly
+    # Graphique interactif de l'évolution de l'ETF sur la période globale choisie dans la barre latérale
     fig = make_timeseries_fig(data, period)
 
-    # Allocation & couleur de bordure (on met en rouge ici pour reproduire votre screenshot)
-    alloc_pct   = allocations[name]
-    border_color = "crimson"  # ou calculez via get_border_color(alloc_pct)
+    # Couleur du cadre de titre basée sur le score global
+    border_color, bg_color = score_to_colors(raw_scores[name])
 
     # --- CARTE COMPLÈTE ---
     with cols[idx % 2]:
-        begin_card(border_color)
+        begin_card()
 
-        # Titre + variation %
+        # Titre + variation % dans un cadre coloré
         st.markdown(
-            f"**{name}: {last:.2f} "
-            f"<span style='color:{perf_color}'>{delta:+.2f}%</span>**",
-            unsafe_allow_html=True
+            f"<div style='border:2px solid {border_color};background-color:{bg_color};border-radius:4px;padding:4px;margin-bottom:8px;'>"
+            f"<strong>{name}: {last:.2f} "
+            f"<span style='color:{perf_color}'>{delta:+.2f}%</span></strong>"
+            "</div>",
+            unsafe_allow_html=True,
         )
 
-        # Chart
+        # Graphique
         st.plotly_chart(fig, use_container_width=True)
 
-        # Badges interactifs
+        # Badges colorés reflétant le score sur chaque période
         badge_cols = st.columns(len(TIMEFRAMES))
         for i, (lbl, _w) in enumerate(TIMEFRAMES.items()):
             score, arrow, bg = tf_scores[name][lbl]
             with badge_cols[i]:
-                if st.button(f"{lbl} {arrow}", key=f"{name}_{lbl}"):
-                    st.session_state[key_win] = lbl
-
                 st.markdown(
-                    f"<span style='background:{bg};color:white;"
-                    f"padding:4px;border-radius:4px;font-size:12px;'>"
-                    f"{lbl} {arrow}</span>",
-                    unsafe_allow_html=True
+                    f"<span style='background:{bg};color:white;padding:4px;border-radius:4px;font-size:12px;display:block;text-align:center;'>"
+                    f"{lbl} {arrow} {score:+.1f}"
+                    "</span>",
+                    unsafe_allow_html=True,
                 )
 
-        # Macro-indicateurs
+        # Macro-indicateurs affichés en bas de la carte
         items = []
         for lbl in MACRO_SERIES:
             if lbl in macro_df and not macro_df[lbl].dropna().empty:
@@ -142,3 +241,9 @@ for idx, (name, series) in enumerate(prices.items()):
         )
 
         end_card()
+
+# Avertissement légal sous l'ensemble des cartes
+st.markdown(
+    "<p style='font-size:12px;'>⚠️ Investir comporte des risques. Les performances passées ne préjugent pas des performances futures.</p>",
+    unsafe_allow_html=True,
+)
