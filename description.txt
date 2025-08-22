@@ -7,8 +7,9 @@ Dashboard DCA ETF - Description UX
   - Liste déroulante "Période des graphiques" pour choisir l'horizon global (Hebdo, Mensuel, Trimestriel, Annuel, 5 ans).
   - Message informatif libre (ex. VIX non disponible).
   - Section "Pondération ETF" présentant un tableau :
-    - Colonne "Origine %" (pas de 0.5 %) redistribuant automatiquement les autres valeurs pour que le total reste à 100 %.
+    - Colonne "Origine %" (pas de 0.5 %), sans redistribution automatique ; une ligne "Total" indique la somme et une alerte s'affiche si elle n'est pas égale à 100 %.
     - Colonne "Reco %" initialisée à partir des scores, modifiable à pas de 0.5 % avec redistribution proportionnelle pour garder 100 %.
+    - Ligne de total affichant la somme de chaque colonne.
     - Avertissement si la somme d'une colonne diffère de 100 %.
 - Zone principale en deux colonnes affichant des cartes pour chaque ETF :
   - Titre dans un cadre coloré indiquant la dernière valeur et la variation sur 24 h.

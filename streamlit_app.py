@@ -151,11 +151,13 @@ for name in ETFS:
     orig_inputs[name] = o_val
     reco_inputs[name] = r_val
 
-# Détection des changements et redistribution pour conserver 100 %
+# Détection d'une modification dans la colonne "Origine %"
 changed_orig = [n for n in ETFS if abs(orig_inputs[n] - prev_orig[n]) > 1e-9]
 if changed_orig:
+    # Mise à jour directe sans redistribution ; le total peut s'écarter de 100 %
     key = changed_orig[0]
-    st.session_state["origine_pcts"] = redistribute(prev_orig, key, orig_inputs[key])
+    st.session_state["origine_pcts"][key] = orig_inputs[key]
+    # Recalcul de la colonne recommandée à partir des nouvelles valeurs d'origine
     weighted = {n: st.session_state["origine_pcts"][n] * adj_scores.get(n, 0.0) for n in ETFS}
     tot = sum(weighted.values()) or 1
     st.session_state["reco_pcts"] = {n: weighted[n] / tot * 100 for n in ETFS}
@@ -167,8 +169,15 @@ if changed_reco:
     st.session_state["reco_pcts"] = redistribute(prev_reco, key, reco_inputs[key])
     st.experimental_rerun()
 
+# Ligne récapitulative des totaux pour chaque colonne
 tot_orig = sum(st.session_state["origine_pcts"].values())
 tot_reco = sum(st.session_state["reco_pcts"].values())
+tot_cols = st.sidebar.columns([2, 2, 2])
+tot_cols[0].markdown("**Total**")
+tot_cols[1].markdown(f"**{tot_orig:.2f}%**")
+tot_cols[2].markdown(f"**{tot_reco:.2f}%**")
+
+# Alerte si le total de la colonne Origine s'écarte de 100 %
 if abs(tot_orig - 100) > 0.01:
     st.sidebar.error(f"Origine total {tot_orig:.2f}% (Δ {tot_orig-100:+.2f}%)")
 if abs(tot_reco - 100) > 0.01:
