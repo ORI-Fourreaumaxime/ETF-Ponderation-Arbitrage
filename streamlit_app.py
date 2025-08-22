@@ -4,11 +4,11 @@ Dashboard DCA ETF avec cartes « full-block » encadrées.
 """
 
 import streamlit as st
-from constants       import ETFS, TIMEFRAMES, MACRO_SERIES
-from data_loader     import load_prices, load_macro
-from scoring         import pct_change, score_and_style
-from plotting        import make_timeseries_fig
-from streamlit_utils import inject_css, begin_card, end_card
+from dca_dashboard.constants       import ETFS, TIMEFRAMES, MACRO_SERIES
+from dca_dashboard.data_loader     import load_prices, load_macro
+from dca_dashboard.scoring         import pct_change, score_and_style
+from dca_dashboard.plotting        import make_timeseries_fig
+from dca_dashboard.streamlit_utils import inject_css, begin_card, end_card
 
 
 def score_to_colors(score: float) -> tuple[str, str]:
@@ -138,6 +138,7 @@ for name in ETFS:
         step=0.5,
         format="%.2f",
         value=st.session_state["origine_pcts"][name],
+        label_visibility="collapsed",
     )
     r_val = col3.number_input(
         "",
@@ -147,6 +148,7 @@ for name in ETFS:
         step=0.5,
         format="%.2f",
         value=st.session_state["reco_pcts"][name],
+        label_visibility="collapsed",
     )
     orig_inputs[name] = o_val
     reco_inputs[name] = r_val
