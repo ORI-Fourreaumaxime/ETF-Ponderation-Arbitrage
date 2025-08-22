@@ -11,8 +11,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 import plotly.express as px
 from fredapi import Fred
-from typing import Tuple
-from streamlit_utils import begin_card, end_card
+from dca_dashboard.streamlit_utils import begin_card, end_card
+from dca_dashboard.scoring import pct_change, score_and_style
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Dashboard DCA ETF", layout="wide", initial_sidebar_state="expanded")
@@ -43,19 +43,6 @@ macro_series = {
 }
 
 # --- FONCTIONS UTILES ---
-def pct_change(s: pd.Series) -> float:
-    return float((s.iloc[-1] / s.iloc[-2] - 1) * 100) if len(s) > 1 else 0.0
-
-def score_and_style(diff: float, threshold_pct: float) -> Tuple[float, str, str]:
-    t = threshold_pct / 100.0
-    if diff <= -t:
-        return 1.0,  '↑', 'green'
-    elif diff <= 0:
-        return 0.5, '↗', '#c8e6c9'
-    elif diff < t:
-        return -0.5,'↘','orange'
-    else:
-        return -1.0,'↓','crimson'
 
 # --- SIDEBAR ---
 st.sidebar.header("Paramètres de stratégie DCA")
